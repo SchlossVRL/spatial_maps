@@ -1,0 +1,1053 @@
+<!-- Basic experiment for online data collection (SONA or mTurk)-->
+
+<!DOCTYPE html>
+<html>
+    <head>
+        <title></title>
+        <!-- Load in the jspsych tools, plugins,and layout -->
+        <script src= "scripts/jspsych.js"></script>
+        <script src = "serverComm.js" type="text/javascript"></script>
+        <script src= "scripts/jspsych-html-keyboard-response.js"></script>
+        <script src= "scripts/jspsych-image-keyboard-response.js"></script>
+        <script src= "scripts/jspsych-html-button-response.js"></script>
+        <script src= "scripts/jspsych-image-keyboard-responseMAS.js"></script>
+        <script src= "scripts/jspsych-image-text-responseMAS.js"></script>
+        <script src="scripts/jspsych-image-keyboard-responseMAS-colormaps.js"></script>
+        <script src="scripts/jspsych-html-keyboard-responseMAS-colorCompare.js"></script>
+        <script src = "scripts/jspsych-fullscreen.js"></script>
+        <script src = "scripts/jspsych-survey-text.js"></script>
+        <script src = "scripts/jspsych-survey-multi-select.js"></script>
+        <script src = "scripts/jspsych-survey-multi-selectMAS.js"></script>
+        <script src = "scripts/jspsych-survey-multi-choice.js"></script>
+        <script src = "scripts/jspsych-survey-multi-choiceCZ.js"></script>
+        <script src = "scripts/jspsych-call-function.js"></script>
+        <link href= "scripts/jspsych.css" rel="stylesheet" type="text/css"></link>
+    </head>
+    <body>
+    </body>
+<script>
+
+
+//General experiment info to update
+    var expServer= 1; //0 = not server version; 1 = server version (checks ID register, condition, data saving)
+    var expType = 1; // 0 = SONA version; 1 = mTurk version (relevant for consent & debriefing)
+   
+    var expTime = 5; // How long experiment will take in minutes
+    var expTime = 5; // How long experiment will take in minutes
+    var experimenterName = "zimnicki@wisc.edu"  //Update to your contact info. this is presented if an error arises for a participant
+    var numConditions = 7; //Number of conditions. If more than 1 and on server, will counterbalance. 
+    var numTasks = 1;  //Number of experimental tasks
+
+
+  //  console.log(numConditions);
+// Set background color // 
+//document.body.style.backgroundColor = "rgb(119,119,119)" //(Gray)
+
+
+
+
+// ----------- DO NOT CHANGE -----------------// 
+
+// Create timeline variable //
+    var timeline1 = []; //timeline for initial screen & fullscreen loading (before registering ID)
+    var timeline = []; //timeline for experiment (once ID is registered)
+
+
+// Pop-up box if people try to leave the page (including refreshing) 
+    window.onbeforeunload = function() {
+        return "If you leave or refresh the page, you will not be able to finish the experiment.";
+    };
+
+
+// Initial welcome screen
+    var initial_screen = {
+        type: 'html-button-response',
+        stimulus: 'Welcome! <p> This experiment involves three parts: a consent form and demographic information, followed by ' +
+            '<p> an experimental task. It will take about '+expTime+' minutes to complete all three parts.</p>' +
+            '<p> At the bottom of this screen, you will see a button that says "Begin Experiment".</p>' +
+            '<p>Please only click that button when you are ready to complete the '+expTime+' minute experiment in one sitting.</p>'+
+            '<p> Once you click that button, it will not be possible to restart the experiment.',
+        choices: ['Begin Experiment'] }
+    timeline1.push(initial_screen);
+
+
+// Get & create subject ID
+    //Give each subject a random ID
+    var randomID = Math.floor((Math.random() * 10000) + 10000); // Create a random ID code for each participant
+    var subject_id = randomID // Create a random ID code for each participant
+
+    //Give each subject a completion code to enter into mTurk
+    var complete_code= Math.floor((Math.random() * 10000) + 30000);
+
+    //Get mTurk/sonaID
+    var urlvar = jsPsych.data.urlVariables();
+    var workerID = urlvar.workerId
+
+
+//Enter fullscreen mode- asks participants to press "continue" button to enter full screen
+    // Once participants enter fullscreen mode, their ID is recorded
+    timeline1.push({
+        type: 'fullscreen',
+        fullscreen_mode: true, //change to true to turn on & false to turn off
+        on_finish: function (){registration()} // Function to register subject ID
+        })
+
+
+// Check if worker/sonaID is already recorded
+  function registration(){
+
+    // If not on server, move on
+    if (expServer == 0){
+        register_success(); //calls the entire experiment to begin
+
+    //If on server, check if ID has been registered
+    }else if (expServer == 1){
+        serverComm.register_subject(workerID,
+            function(){ // If the subject has a unique id that has not yet been recorded, the experiment will load/begin.
+                register_success(); //calls the entire experiment to begin
+            },
+            function(){ // If ID has already been registered, give error message. 
+                document.querySelector('body').innerHTML = '<p>Our records indicate that you have already started this experiment. Due to the nature of the experiment, restarting is not permitted.</p><p>If you believe this message is in error, you can contact the researchers at '+experimenterName+'.</p><p>Our apologies for the trouble.</p>';
+            },
+            function(){ // If there is a technical error.
+                document.querySelector('body').innerHTML = '<p>Our apologies. There was a technical error on our end while loading the experiment.</p><p>You will not be able to complete the experiment. You can contact the researchers at '+experimenterName+' with any questions.</p><p> Our apologies for the trouble.</p>';
+            })
+        }
+    }
+
+
+    function register_success (){ // the entire experiment is embedded in this function
+    
+    //console.log("registered!")
+// Assignment to a condition //
+    //Condition 0 = equal maps, white background
+    //Condition 1 = equal maps, black background
+
+    var assigned_condition = null;
+    var n_conditions = numConditions; 
+
+    // Not on server- randomly select condition
+    if (expServer == 0){
+        function getRandomIntInclusive(min, max) {
+            min = Math.ceil(min);
+            max = Math.floor(max);
+            return  Math.floor(Math.random() * (max - min + 1));
+        }
+        assigned_condition = getRandomIntInclusive(0,n_conditions-1);
+        condition_success()
+
+    //If on server, check condition of previous participant
+    }else if (expServer == 1){
+        serverComm.assign_condition(subject_id, n_conditions,
+        function(response){
+            assigned_condition = response.assignedCondition; //Using the table in the database to assign conditions
+            condition_success()
+        },
+        function(){
+             document.querySelector('body').innerHTML = '<p>Our apologies. There was a technical error on our end while loading the experiment.</p><p>You will not be able to complete the experiment. You can contact the researchers at zimnicki@wisc.edu with any questions.</p><p>Our apologies for the trouble.</p>';
+        });
+    }
+
+ function condition_success(){ //the entire experiment is now embedded in this function.
+// Set condition
+    //var condition_options=[2, 5, 7, 11, 13, 18, 19];
+    //assigned_condition=jsPsych.randomization.sampleWithReplacement(condition_options, 1)[0];
+   // var whichCondition = assigned_condition;
+
+   // var whichCondition = 12;
+   // console.log(whichCondition)
+
+    // whatever we need, + 1 for the colorblindness check
+   const conditionArray = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18, 19];
+   const conditionRep =   [0,0,0,0,0,0,0,0,0,0, 0, 0, 0, 0, 0, 0, 3, 4, 0, 0];
+
+   //var condition_ar = [];
+
+    const repeatedCondition = Array.from(conditionArray, (num, index) => {
+        const repeatCond = conditionRep[index];
+        return Array(repeatCond).fill(num);
+    }).flat();
+
+    console.log(repeatedCondition)
+   console.log(repeatedCondition.length)
+
+    var whichCondition = repeatedCondition[assigned_condition];
+
+    //console.log(whichCondition)
+    
+
+
+    //code for background
+    if (whichCondition <= 9) {
+        document.body.style.backgroundColor = "rgb(255,255,255)"; //white
+        var bg = 1;
+        background = "white";
+    }else if (whichCondition >=10 && whichCondition < 20 ){
+        document.body.style.backgroundColor = "rgb(0, 0, 0)"; //black
+        var bg = 0;
+        background = "black";
+    }
+
+    //var config="unshifted";
+
+
+   // console.log(whichCondition)
+    
+
+   // var bg = 0;
+// Get Start time
+    var start_time = new Date();
+
+
+// Record mturk/SONAID, condition, subjectID, and date info
+    jsPsych.data.addProperties({workerID: workerID, conditionProto: whichCondition, subjectID: subject_id, dateInfo: start_time, background:bg}); //, background: bg
+
+
+// "Fake trial" for checking if experiment loaded correctly
+    var loadCheck = {
+        type: 'html-keyboard-response',
+        stimulus: "",
+        choices: jsPsych.NO_KEYS,
+        trial_duration: 10}
+    timeline.push(loadCheck);
+
+
+// Save the fake trial data to the server (this is done as a way to check that if there is not a full dataset for a registered ID, that the experiment loaded properly and the participant dropped out)
+    timeline.push({
+        type: 'call-function',
+        func: function(){saveData(jsPsych.data.get())}
+        });
+
+
+if (bg == 1){
+    
+// Consent form
+    //SONA VERSION
+    if (expType == 0){
+        var consentSign = {
+            type: 'survey-multi-selectMAS',
+            questions: [
+                {prompt:
+                "  <strong>UNIVERSITY OF WISCONSIN-MADISON</strong>" +
+                "  <br><strong>Research Participant Information and Consent Form</strong>" +
+                " <br><br><strong>Title of the Study:</strong> Investigating how observers perceive, interpret, and evaluate visual features in 2D scenes and 3D environments" +
+                " <br><br><strong>Principal Investigator:</strong> Karen B. Schloss (phone: 608-316-4495) (email: kschloss@wisc.edu)" +
+                "  <br><br><strong><u>DESCRIPTION OF THE RESEARCH</u></strong>" +
+                "  <br>You are invited to participate in a research study about how visual features influence the ability to perceive, interpret, navigate, and remember information in visual displays." +
+                "  <br><br>You have been asked to participate because you saw a description of the study and signed up to be a participant." +
+                "  <br><br>The purpose of the research is to understand principles by which people perceive, evaluate and interpret visual information (e.g., the meaning of parts of a scientific diagram)." +
+                "  <br><br>This study will include adults from UW-Madison and nearby areas who volunteer to participate." +
+                "  <br><br>The research will be conducted online, with no requirement to appear in person." +
+                "  <br><br><strong><u>WHAT WILL MY PARTICIPATION INVOLVE?</u></strong>" +
+                "  <br>If you decide to participate in this research you will be presented with visual displays containing images and/or text and will be asked to make judgments about them. For example, you may see shapes and be asked how round they appear or view a graph with a legend and interpret information about the data in the graph. You will be asked to respond by making button presses on a keyboard/mouse. You may be asked to complete questionnaires about your expertise or educational level in a given domain (e.g., neuroscience) and questionnaires about what sorts of things you like/dislike. Finally, you may be asked to respond to questions about your experience during the experiment (e.g., how much you enjoyed the task)." +
+                "  <br><br>You will be asked to complete 2-6 surveys or tasks." +
+                "  <br><br>Your participation will last approximately 30 min - 60 min per session (as specified when you signed up to participate) and will require 1 session (30 to 60 min total)." +
+                "  <br><br><strong><u>ARE THERE ANY RISKS TO ME?</u></strong>" +
+                "  <br>We don't anticipate any risks to you from participation in this study." +
+                "  <br><br><strong><u>ARE THERE ANY BENEFITS TO ME?</u></strong>" +
+                "  <br>There are no direct benefits for participating in this study." +
+                "  <br><br><strong><u>WILL I BE COMPENSATED FOR MY PARTICIPATION?</u></strong>" +
+                "  <br>You will receive the number of extra credit points that were specified when you signed up for this experiment (1 credit for 30 min slot, 2 credit = 60 min slot), to be used in your class for participating in this study." +
+                "  <br><br>If you do withdraw prior to the end of the study, you will receive no compensation." +
+                "  <br><br><strong><u>HOW WILL MY CONFIDENTIALITY BE PROTECTED?</u></strong>" +
+                "  <br>While there will probably be publications as a result of this study, your name will not be used. Typically, group characteristics will be published, but datasets with individual responses may also be shared. In such cases, the data will not be linked to your name or other identifiable information." +
+                "  <br><br><strong><u>WHOM SHOULD I CONTACT IF I HAVE QUESTIONS?</u></strong>" +
+                "   <br>You may ask any questions about the research at any time. If you have questions about the research you can contact the Principal Investigator Karen B. Schloss at 608-316-4495." +
+                "   <br><br>If you are not satisfied with response of research team, have more questions, or want to talk with someone about your rights as a research participant, you should contact the Education and Social/Behavioral Science IRB Office at 608-263-2320." +
+                "  <br><br>Your participation is completely voluntary. If you decide not to participate or to withdraw from the study you may do so without penalty." +
+                "  <br><br>By clicking the box below, you confirm that you have read this consent form, had an opportunity to ask any questions about your participation in this research and voluntarily consent to participate. You may print a copy of this form for your records." +
+                "  <br><br>Please click the box below next to the text 'I consent' to give your informed consent to participate. " +
+                "   </p>",
+                options: ["<strong>I consent</strong>"],
+                horizontal: false,
+                required: true,
+                name: 'Consent'},
+                ],
+            button_label: "Start Experiment",
+            };
+
+    // MTURK VERSION
+    }else if (expType == 1){
+         var consentSign = {
+            type: 'survey-multi-selectMAS',
+            questions: [
+                {prompt:
+                "  <strong>UNIVERSITY OF WISCONSIN-MADISON</strong>" +
+                "  <br><strong>Research Participant Information and Consent Form</strong>" +
+                " <br><br><strong>Title of the Study:</strong> Investigating how observers perceive, interpret, and evaluate visual features in 2D scenes and 3D environments" +
+                " <br><br><strong>Principal Investigator:</strong> Karen B. Schloss (phone: 608-316-4495) (email: kschloss@wisc.edu)" +
+                "  <br><br><strong><u>DESCRIPTION OF THE RESEARCH</u></strong>" +
+                "  <br>You are invited to participate in a research study about how visual features influence the ability to perceive, interpret, navigate, and remember information in visual displays" +
+                "  <br><br>You have been asked to participate because you accepted the HIT on Amazon Mechanical Turk." +
+                "  <br><br>The purpose of the research is to understand principles by which people perceive, evaluate and interpret visual information (e.g., the meaning of parts of a scientific diagram)." +
+                "  <br><br>This study will include adults (at least 18 yrs) from who participate in Amazon Mechanical Turk HITs." +
+                "  <br><br>The research will be conducted on the electronic device that you are using." +
+                "  <br><br><strong><u>WHAT WILL MY PARTICIPATION INVOLVE?</u></strong>" +
+                "  <br>If you decide to participate in this research you will be presented with visual displays containing images and/or text and will be asked to make judgments about them. For example, you may see shapes and be asked how round they appear or view a graph with a legend and interpret information about the data in the graph. You will be asked to respond by making button presses on a keyboard/mouse. You may be asked to complete questionnaires about your expertise or educational level in a given domain (e.g., neuroscience) and questionnaires about what sorts of things you like/dislike. Finally, you may be asked to respond to questions about your experience during the experiment (e.g., how much you enjoyed the task)." +
+                "  <br><br>You will be asked to complete 2-6 surveys or tasks." +
+                "  <br><br>Your participation will last approximately 5 min - 60 min per session and will require 1 session." +
+                "  <br><br><strong><u>ARE THERE ANY RISKS TO ME?</u></strong>" +
+                "  <br>We don't anticipate any risks to you from participation in this study." +
+                "  <br><br><strong><u>ARE THERE ANY BENEFITS TO ME?</u></strong>" +
+                "  <br>We don't expect any direct benefits to you from participation in this study." +
+                "  <br><br><strong><u>WILL I BE COMPENSATED FOR MY PARTICIPATION?</u></strong>" +
+                "  <br>The amount of compensation depends on the length of the task, based on a rate of $7.25 per hour. The compensation amount for this HIT, as specified in the HIT description, was pre-determined based on the amount of time it took previous participants to do similar tasks."+
+                "  <br><br>If you do withdraw prior to the end of the study, you will receive no compensation." +
+                "  <br><br><strong><u>HOW WILL MY CONFIDENTIALITY BE PROTECTED?</u></strong>" +
+                "  <br>Participant information will remain confidential. Neither your name or any other identifiable information will be recorded. Typically, group characteristics will be published, but datasets with individual responses may also be shared. In such cases, the data will not be linked to your name or other identifiable information." +
+                "  <br><br><strong><u>WHOM SHOULD I CONTACT IF I HAVE QUESTIONS?</u></strong>" +
+                "   <br>You may ask any questions about the research at any time. If you have questions about the research you can contact the Principal Investigator Karen B. Schloss at 608-316-4495." +
+                "   <br><br>If you are not satisfied with response of research team, have more questions, or want to talk with someone about your rights as a research participant, you should contact the Education and Social/Behavioral Science IRB Office at 608-263-2320." +
+                "  <br><br>Your participation is completely voluntary. If you decide not to participate or to withdraw from the study you may do so without penalty." +
+                "  <br><br>By clicking the box below, you confirm that you have read this consent form, had an opportunity to ask any questions about your participation in this research and voluntarily consent to participate. You may print a copy of this form for your records." +
+                "  <br><br>Please click the box below next to the text 'I consent' to give your informed consent to participate. " +
+                "   </p>",
+                options: ["<strong>I consent</strong>"],
+                horizontal: false,
+                required: true,
+                name: 'Consent'},
+                ],
+            button_label: "Start Experiment",
+            };
+    }
+    timeline.push(consentSign);
+
+
+}else if (bg == 0){
+                                
+                // Consent form
+                    //SONA VERSION
+                    if (expType == 0){
+                        var consentSign = {
+                            type: 'survey-multi-selectMAS',
+                            questions: [
+                                {prompt:
+                                "  <p style='color:white'><strong>UNIVERSITY OF WISCONSIN-MADISON</strong>" +
+                                "  <br><strong>Research Participant Information and Consent Form</strong>" +
+                                " <br><br><strong>Title of the Study:</strong> Investigating how observers perceive, interpret, and evaluate visual features in 2D scenes and 3D environments" +
+                                " <br><br><strong>Principal Investigator:</strong> Karen B. Schloss (phone: 608-316-4495) (email: kschloss@wisc.edu)" +
+                                "  <br><br><strong><u>DESCRIPTION OF THE RESEARCH</u></strong>" +
+                                "  <br>You are invited to participate in a research study about how visual features influence the ability to perceive, interpret, navigate, and remember information in visual displays." +
+                                "  <br><br>You have been asked to participate because you saw a description of the study and signed up to be a participant." +
+                                "  <br><br>The purpose of the research is to understand principles by which people perceive, evaluate and interpret visual information (e.g., the meaning of parts of a scientific diagram)." +
+                                "  <br><br>This study will include adults from UW-Madison and nearby areas who volunteer to participate." +
+                                "  <br><br>The research will be conducted online, with no requirement to appear in person." +
+                                "  <br><br><strong><u>WHAT WILL MY PARTICIPATION INVOLVE?</u></strong>" +
+                                "  <br>If you decide to participate in this research you will be presented with visual displays containing images and/or text and will be asked to make judgments about them. For example, you may see shapes and be asked how round they appear or view a graph with a legend and interpret information about the data in the graph. You will be asked to respond by making button presses on a keyboard/mouse. You may be asked to complete questionnaires about your expertise or educational level in a given domain (e.g., neuroscience) and questionnaires about what sorts of things you like/dislike. Finally, you may be asked to respond to questions about your experience during the experiment (e.g., how much you enjoyed the task)." +
+                                "  <br><br>You will be asked to complete 2-6 surveys or tasks." +
+                                "  <br><br>Your participation will last approximately 30 min - 60 min per session (as specified when you signed up to participate) and will require 1 session (30 to 60 min total)." +
+                                "  <br><br><strong><u>ARE THERE ANY RISKS TO ME?</u></strong>" +
+                                "  <br>We don't anticipate any risks to you from participation in this study." +
+                                "  <br><br><strong><u>ARE THERE ANY BENEFITS TO ME?</u></strong>" +
+                                "  <br>There are no direct benefits for participating in this study." +
+                                "  <br><br><strong><u>WILL I BE COMPENSATED FOR MY PARTICIPATION?</u></strong>" +
+                                "  <br>You will receive the number of extra credit points that were specified when you signed up for this experiment (1 credit for 30 min slot, 2 credit = 60 min slot), to be used in your class for participating in this study." +
+                                "  <br><br>If you do withdraw prior to the end of the study, you will receive no compensation." +
+                                "  <br><br><strong><u>HOW WILL MY CONFIDENTIALITY BE PROTECTED?</u></strong>" +
+                                "  <br>While there will probably be publications as a result of this study, your name will not be used. Typically, group characteristics will be published, but datasets with individual responses may also be shared. In such cases, the data will not be linked to your name or other identifiable information." +
+                                "  <br><br><strong><u>WHOM SHOULD I CONTACT IF I HAVE QUESTIONS?</u></strong>" +
+                                "   <br>You may ask any questions about the research at any time. If you have questions about the research you can contact the Principal Investigator Karen B. Schloss at 608-316-4495." +
+                                "   <br><br>If you are not satisfied with response of research team, have more questions, or want to talk with someone about your rights as a research participant, you should contact the Education and Social/Behavioral Science IRB Office at 608-263-2320." +
+                                "  <br><br>Your participation is completely voluntary. If you decide not to participate or to withdraw from the study you may do so without penalty." +
+                                "  <br><br>By clicking the box below, you confirm that you have read this consent form, had an opportunity to ask any questions about your participation in this research and voluntarily consent to participate. You may print a copy of this form for your records." +
+                                "  <br><br>Please click the box below next to the text 'I consent' to give your informed consent to participate. " +
+                                "   </p>",
+                                options: ['<strong style="color:white;">I consent</strong>'],
+                                horizontal: false,
+                                required: true,
+                                name: 'Consent'},
+                                ],
+                            button_label: "Start Experiment",
+                            };
+
+                    // MTURK VERSION
+                    }else if (expType == 1){
+                        var consentSign = {
+                            type: 'survey-multi-selectMAS',
+                            questions: [
+                                {prompt:
+                                "  <p style='color:white'><strong>UNIVERSITY OF WISCONSIN-MADISON</strong>" +
+                                "  <br><strong>Research Participant Information and Consent Form</strong>" +
+                                " <br><br><strong>Title of the Study:</strong> Investigating how observers perceive, interpret, and evaluate visual features in 2D scenes and 3D environments" +
+                                " <br><br><strong>Principal Investigator:</strong> Karen B. Schloss (phone: 608-316-4495) (email: kschloss@wisc.edu)" +
+                                "  <br><br><strong><u>DESCRIPTION OF THE RESEARCH</u></strong>" +
+                                "  <br>You are invited to participate in a research study about how visual features influence the ability to perceive, interpret, navigate, and remember information in visual displays" +
+                                "  <br><br>You have been asked to participate because you accepted the HIT on Amazon Mechanical Turk." +
+                                "  <br><br>The purpose of the research is to understand principles by which people perceive, evaluate and interpret visual information (e.g., the meaning of parts of a scientific diagram)." +
+                                "  <br><br>This study will include adults (at least 18 yrs) from who participate in Amazon Mechanical Turk HITs." +
+                                "  <br><br>The research will be conducted on the electronic device that you are using." +
+                                "  <br><br><strong><u>WHAT WILL MY PARTICIPATION INVOLVE?</u></strong>" +
+                                "  <br>If you decide to participate in this research you will be presented with visual displays containing images and/or text and will be asked to make judgments about them. For example, you may see shapes and be asked how round they appear or view a graph with a legend and interpret information about the data in the graph. You will be asked to respond by making button presses on a keyboard/mouse. You may be asked to complete questionnaires about your expertise or educational level in a given domain (e.g., neuroscience) and questionnaires about what sorts of things you like/dislike. Finally, you may be asked to respond to questions about your experience during the experiment (e.g., how much you enjoyed the task)." +
+                                "  <br><br>You will be asked to complete 2-6 surveys or tasks." +
+                                "  <br><br>Your participation will last approximately 5 min - 60 min per session and will require 1 session." +
+                                "  <br><br><strong><u>ARE THERE ANY RISKS TO ME?</u></strong>" +
+                                "  <br>We don't anticipate any risks to you from participation in this study." +
+                                "  <br><br><strong><u>ARE THERE ANY BENEFITS TO ME?</u></strong>" +
+                                "  <br>We don't expect any direct benefits to you from participation in this study." +
+                                "  <br><br><strong><u>WILL I BE COMPENSATED FOR MY PARTICIPATION?</u></strong>" +
+                                "  <br>The amount of compensation depends on the length of the task, based on a rate of $7.25 per hour. The compensation amount for this HIT, as specified in the HIT description, was pre-determined based on the amount of time it took previous participants to do similar tasks."+
+                                "  <br><br>If you do withdraw prior to the end of the study, you will receive no compensation." +
+                                "  <br><br><strong><u>HOW WILL MY CONFIDENTIALITY BE PROTECTED?</u></strong>" +
+                                "  <br>Participant information will remain confidential. Neither your name or any other identifiable information will be recorded. Typically, group characteristics will be published, but datasets with individual responses may also be shared. In such cases, the data will not be linked to your name or other identifiable information." +
+                                "  <br><br><strong><u>WHOM SHOULD I CONTACT IF I HAVE QUESTIONS?</u></strong>" +
+                                "   <br>You may ask any questions about the research at any time. If you have questions about the research you can contact the Principal Investigator Karen B. Schloss at 608-316-4495." +
+                                "   <br><br>If you are not satisfied with response of research team, have more questions, or want to talk with someone about your rights as a research participant, you should contact the Education and Social/Behavioral Science IRB Office at 608-263-2320." +
+                                "  <br><br>Your participation is completely voluntary. If you decide not to participate or to withdraw from the study you may do so without penalty." +
+                                "  <br><br>By clicking the box below, you confirm that you have read this consent form, had an opportunity to ask any questions about your participation in this research and voluntarily consent to participate. You may print a copy of this form for your records." +
+                                "  <br><br>Please click the box below next to the text 'I consent' to give your informed consent to participate. " +
+                                "   </p>",
+                                options: ['<strong style="color:white;">I consent</strong>'],
+                                horizontal: false,
+                                required: true,
+                                name: 'Consent'},
+                                ],
+                            button_label: "Start Experiment",
+                            };
+                    }
+                    timeline.push(consentSign);
+}
+
+
+// Inter trial interval //
+    var fixation = {
+        type: 'html-keyboard-response',
+        stimulus: '<div style= "font-size:45px;">+</div>',
+        choices: jsPsych.NO_KEYS,
+        trial_duration: 500
+    }
+
+if (bg == 1){
+    var age_gender = {
+            type: 'survey-text',
+            questions: [
+                {prompt: "Age:", name: 'Age', rows: "1", columns: "3", required: true,},
+                {prompt: "Gender:", name: 'Gender', rows: "1", columns: "10", required: true,},
+                {prompt: "Race: I identify as...", name: 'Race', rows: "1", columns: "10", required: true,}
+                ],
+            preamble: "Please answer the following questions.",
+            button_label: "Done",
+            randomize_question_order: false
+            }
+        timeline.push(age_gender);
+
+// Consent and demo Completion
+    var demo_completion = {
+        type: "html-keyboard-response",
+        stimulus: "<p> You have completed the consent process and answered the demographic questions." +
+            "</p><p> Press the left or right arrow keys to continue to the first experimental task. </p>",
+        choices: [37, 39]
+        };
+
+    timeline.push(demo_completion);
+
+} else if (bg == 0){
+    var age_gender = {
+        type: 'survey-text',
+        questions: [
+            {prompt: '<p style="color:white;">Age:</p>', name: 'Age', rows: "1", columns: "3", required: true,},
+            {prompt: '<p style="color:white;">Gender:</p>', name: 'Gender', rows: "1", columns: "10", required: true,},
+            {prompt: '<p style="color:white;">Race/ethnicity: I identify as...</p>', name: 'Race', rows: "1", columns: "10", required: true,}
+            ],
+        preamble: '<p style="color:white;">Please answer the following questions.</p>',
+        button_label: "Done",
+        randomize_question_order: false
+        }
+        timeline.push(age_gender);
+
+        // Consent and demo Completion
+        var demo_completion = {
+            type: "html-keyboard-response",
+            stimulus: '<p style="color:white;"> You have completed the consent process and answered the demographic questions.' +
+                '</p><p style="color:white;"> Press the left or right arrow keys to continue to the first experimental task. </p>',
+            choices: [37, 39]
+            };
+        timeline.push(demo_completion);
+
+}
+//---------------------------------------------preload stuff---------------------------------------------------
+
+
+ 
+        //whichCondition gets randomly assigned to whoever is
+        //doing the experiment (cannot change)
+        if (whichCondition == 0){ 
+            color_scale = "autumn";
+            // for this condition, the colors of the picture are "autumn" color scale
+               
+        }else if (whichCondition == 1){
+
+            color_scale = "brewerBlue";
+                
+        }else if (whichCondition == 2){
+ 
+            color_scale = "brewerRed";
+
+        }else if (whichCondition == 3){
+
+            color_scale = "gray";
+            
+        }else if (whichCondition == 4){
+
+            color_scale = "hot";
+
+        }else if (whichCondition == 5){
+
+            color_scale = "magma";
+
+        }else if (whichCondition == 6){
+
+            color_scale = "mako";
+
+        }else if (whichCondition == 7){
+
+            color_scale = "plasma";
+
+        }else if (whichCondition == 8){
+
+            color_scale = "winter";
+
+        }else if (whichCondition == 9){
+
+            color_scale = "viridis";
+        
+        } else if (whichCondition == 10){
+
+            color_scale = "autumn";
+
+        }else if (whichCondition == 11){
+           
+            color_scale = "brewerBlue";
+
+        }else if (whichCondition == 12){
+           
+            color_scale = "brewerRed";
+
+        }else if (whichCondition == 13){
+            
+            color_scale = "gray";
+
+        }else if (whichCondition == 14){
+            
+            color_scale = "hot";
+
+        }else if (whichCondition == 15){
+           
+            color_scale = "magma";
+            
+        }else if (whichCondition == 16){
+           
+            color_scale = "mako";
+
+        }else if (whichCondition == 17){
+            
+            color_scale = "plasma";
+
+        }else if (whichCondition == 18){
+            
+            color_scale = "winter";
+        }
+        else if (whichCondition == 19){
+            
+            color_scale = "viridis";
+
+        }
+
+
+    
+    var instr_stimuli = [
+        "<img src='img/" + color_scale + "_" + background +  "_L_0.png'></img>",
+        "<img src='img/" + color_scale  + "_" + background + "_R_0.png'></img>",
+    ];
+
+ 
+    // present a random colormap from the array in the instructions
+    var random_present = jsPsych.randomization.sampleWithReplacement(instr_stimuli, 1);
+
+    //console.log(random_present);
+
+    if (bg == 1){
+            var instructions3 = {
+            type: "html-keyboard-response",
+            stimulus: "<p> In this experiment, you will be presented with colormaps, like the example shown below."
+                + "</p><p> The colormaps represent measurements collected in different parts of counties across the country."
+                + "</p><p> For each colormap, your task is to indicate whether the measurements had larger numbers on the left or" 
+                + "</p><p> right side of the county. If you think the measured numbers were larger on the left, press the LEFT arrow key."
+                + "</p><p> If you think they were larger on the right, press the RIGHT arrow key. "
+                + "</p><p>Press the left or right arrow keys to continue."
+                + "</p><p> " + random_present,
+            choices: [37, 39],
+            post_trial_gap: 500,
+            allow_keys: true
+            };
+            timeline.push(instructions3)
+
+    } else if (bg==0){
+        var instructions3 = {
+            type: "html-keyboard-response",
+            stimulus: '<p style="color:white;"> In this experiment, you will be presented with colormaps, like the example shown below.'
+                + '</p><p style="color:white;"> The colormaps represent measurements collected in different parts of counties across the country.'
+                + '</p><p style="color:white;"> For each colormap, your task is to indicate whether the measurements had larger numbers on the left or'
+                + '</p><p style="color:white;"> right side of the county. If you think the measured numbers were larger on the left, press the LEFT arrow key.'
+                + '</p><p style="color:white;"> If you think they were larger on the right, press the RIGHT arrow key. '
+                + '</p><p style="color:white;">Press the left or right arrow keys to continue.'
+                + "</p><p> " + random_present,
+            choices: [37, 39],
+            post_trial_gap: 500,
+            allow_keys: true
+            };
+            timeline.push(instructions3)
+
+        }
+
+    //console.log(num.length)
+
+    num=["1", "2", "3", "4", "5"];
+
+    var stim_preload = [];
+    var test_stimuli = [];
+
+    for (i = 0; i < num.length; i++){
+        stim_preload.push(
+            stimulus = "img/" + color_scale + "_" + background + "_L_" + num[i] + ".png",
+            stimulus= "img/" + color_scale + "_" + background + "_R_" + num[i] + ".png"
+        )
+
+        test_stimuli.push({ stimulus: "img/" + color_scale  + "_" + background + "_L_" + num[i] + ".png", data: {test_part: 'test'}},
+                          { stimulus: "img/" + color_scale  + "_" + background + "_R_" + num[i] + ".png", data: {test_part: 'test'}})
+
+    }
+
+    //console.log(stim_preload)
+    //console.log(test_stimuli)
+    // test trials 
+
+
+    //console.log(stim_preload)
+    //console.log(test_stimuli)
+    // test trials 
+
+
+if (bg == 1){
+    var test = {
+      type: "image-keyboard-responseMAS",
+      prompt: "Where were the measured numbers larger?",
+      prompt_location: "above",
+      stimulus: jsPsych.timelineVariable('stimulus'),
+      choices: ['leftarrow', 'rightarrow'],
+      data: jsPsych.timelineVariable('data'),
+      post_trial_gap: 500
+    }
+}else if (bg == 0){
+    var test = {
+      type: "image-keyboard-responseMAS",
+      prompt: '<p style="color:white;">Where were the measured numbers larger?</p>',
+      prompt_location: "above",
+      stimulus: jsPsych.timelineVariable('stimulus'),
+      choices: ['leftarrow', 'rightarrow'],
+      data: jsPsych.timelineVariable('data'),
+      post_trial_gap: 500
+    }
+}
+
+
+    var test_procedure = {
+      timeline_variables: test_stimuli,
+      timeline: [test],
+      repetitions: 1,
+      randomize_order: true,
+      post_trial_gap: 500
+    }
+    timeline.push(test_procedure);
+
+    
+
+    
+//---------------------- end task 3 --------------=--------------------------------------------------
+
+
+
+
+    /* --------------------------------------- Color vision check ------------------------ */
+
+//This code presents 11 ishihara plates using the plugin: jspych-image-text-responseMAS. 
+// the plates are from: https://www.mdcalc.com/color-vision-screening-ishihara-test#next-steps
+//This code always presents plate 0 first, which everyone should be able to see. Then the code randomly presents the other 11 plates.  
+
+//At least 9 of 11 plates must be correctly answered for a participant to be included in your analyses. (aka, they can miss up to two plates)
+
+//In the data table: 
+// stimulus: file name of the given ishihara plate (files named as "ishihara-#")
+// prompt: correct answer for that plate
+// responses: participant's response (typed into a text box)
+// correct: whether participants were correct (1) or incorrect (0). 
+
+
+//*Note, it might be good practice to do a quick visual check of participants responses (rather than only looking at correct vs. incorrect), 
+// to ensure that they really did get it correct/incorrect given what they typed. they could, for example, type the word "FIVE", rather than
+// input the number "5", which would be coded as incorrect per the "correct" column in the data table. 
+
+
+//document.body.style.backgroundColor = "rgb(185, 185, 185)";
+if (bg == 1) {
+    // Ishihara color vision check //
+    var ishihara_instructions = {
+    type: "html-keyboard-response",
+        stimulus: 
+        '<p>Good job! You have finished the experimental task. Next, you will see an image on the screen.' +
+        '<br>If you see a number in the image, please carefully type that number in the box.</p>'+
+        '<p>If you do not see a number in the image, please type "None" in the box.'+
+        '<br>This part of the experiment will take about 2 minutes.</p>'+
+        '<p>Please press the left or right arrow keys to begin.</p>',
+        post_trial_gap: 500,
+        choices: [37, 39]
+    };
+    timeline.push(ishihara_instructions);
+
+
+
+    //random function
+    function getRandomIntInclusive(min, max) {
+            min = Math.ceil(min);
+            max = Math.floor(max);
+            return  Math.floor(Math.random() * (max - min + 1));
+        }
+    
+
+   //Loop to present 11 ishihara plates of a unique type
+   var plateCounter = [0,0,0,0,0,0,0,0,0,0,0]
+   var numPlates = 11; 
+   for (plateNum = 0; plateNum < numPlates;){
+
+
+        //Randomly select which plate to present
+        var whichPlate = getRandomIntInclusive(0,10);
+
+        //always present this plate first
+        if (plateNum == 0){
+                whichPlate = 0;
+                answer  =  JSON.stringify({"ishihara":"12"});
+        }
+
+        // specify correct answer
+        if (whichPlate == 1){
+            answer = JSON.stringify({"ishihara":"8"});
+        }else if (whichPlate == 2){
+            answer = JSON.stringify({"ishihara":"5"}); 
+        }else if (whichPlate == 3){
+            answer = JSON.stringify({"ishihara":"29"}); 
+        }else if (whichPlate == 4){
+            answer = JSON.stringify({"ishihara":"74"});
+        }else if (whichPlate == 5){
+            answer = JSON.stringify({"ishihara":"7"}); 
+        }else if (whichPlate == 6){
+            answer = JSON.stringify({"ishihara":"45"});  
+        }else if (whichPlate == 7){
+            answer = JSON.stringify({"ishihara":"2"}); 
+        }else if (whichPlate == 8){
+            answer = JSON.stringify({"ishihara":"16"});
+        }else if (whichPlate == 9){
+            answer = JSON.stringify({"ishihara":"35"}); 
+        }else if (whichPlate == 10){
+            answer = JSON.stringify({"ishihara":"96"}); 
+        }
+ 
+        //Check to ensure this plate not previously presented
+        if (plateCounter[whichPlate] == 0) {
+            //Present trial
+            var ishihara_plate = {
+                type: 'image-text-responseMAS',
+                stimulus: "ishiharaPlateImg/ishihara-"+whichPlate+".png", 
+                stimulus_height: 400, 
+                correctAnswer: answer,
+                on_start: function(trial) {
+                    correctAnswer = trial.correctAnswer}, //recorded in the "prompt" column of the output
+                questions: [
+                    { prompt: "Carefully type what number you see. "+
+                        "<p>If you do not see a number, type 'None'.",
+                    rows: 1, 
+                    columns: 1,
+                    required: true,
+                    name: 'ishihara'}],
+                    button_label: "Next",
+                    on_finish: function(data){
+                            if(data.responses == correctAnswer){
+                                data.correct = 1;  //correct
+                            } else {
+                                data.correct = 0;}} //incorrect
+                    }         
+            timeline.push(ishihara_plate) 
+            plateCounter[whichPlate] = 1; 
+            plateNum++
+        }
+    }
+
+
+
+    // Color Vision check //
+    var colorvision = {
+        type: 'survey-multi-choice',
+        questions: [
+            {prompt: "Do you have difficulty seeing colors or noticing differences<br>between colors compared to the average person?",
+            options: ["Yes", "No"],
+            horizontal: false,
+            required: true, 
+            name: 'colorDifficulty'},
+
+            {prompt: "Do you consider yourself to be colorblind? ",
+            options: ["Yes", "No"],
+            horizontal: false,
+            required: true, 
+            name: 'colorBlind'},
+
+            {prompt: "What device did you use to complete this experiment?",
+            options: ["Computer", "Tablet", "Phone", "Other"],
+            horizontal: false,
+            required: true, 
+            name: 'device'}
+        ],
+        preamble: "",
+        button_label: "Done",
+        randomize_question_order: false,
+        }; 
+    timeline.push(colorvision); 
+
+
+} else if (bg == 0) {
+ // Ishihara color vision check //
+ var ishihara_instructions = {
+    type: "html-keyboard-response",
+        stimulus: 
+        '<p style="color:white;">Good job! You have finished the experimental task. Next, you will see an image on the screen.'+
+        '<br>If you see a number in the image, please carefully type that number in the box.</p>'+
+        '<p style="color:white;">If you do not see a number in the image, please type "None" in the box.'+
+        '<br>This part of the experiment will take about 2 minutes.</p>'+
+        '<p style="color:white;">Please press the left or right arrow keys to begin.</p>',
+        post_trial_gap: 500,
+        choices: [37, 39]
+    };
+    timeline.push(ishihara_instructions);
+
+       //random function
+       function getRandomIntInclusive(min, max) {
+            min = Math.ceil(min);
+            max = Math.floor(max);
+            return  Math.floor(Math.random() * (max - min + 1));
+        }
+    
+
+   //Loop to present 11 ishihara plates of a unique type
+   var plateCounter = [0,0,0,0,0,0,0,0,0,0,0]
+   var numPlates = 11; 
+   for (plateNum = 0; plateNum < numPlates;){
+
+
+        //Randomly select which plate to present
+        var whichPlate = getRandomIntInclusive(0,10);
+
+        //always present this plate first
+        if (plateNum == 0){
+                whichPlate = 0;
+                answer  =  JSON.stringify({"ishihara":"12"});
+        }
+
+        // specify correct answer
+        if (whichPlate == 1){
+            answer = JSON.stringify({"ishihara":"8"});
+        }else if (whichPlate == 2){
+            answer = JSON.stringify({"ishihara":"5"}); 
+        }else if (whichPlate == 3){
+            answer = JSON.stringify({"ishihara":"29"}); 
+        }else if (whichPlate == 4){
+            answer = JSON.stringify({"ishihara":"74"});
+        }else if (whichPlate == 5){
+            answer = JSON.stringify({"ishihara":"7"}); 
+        }else if (whichPlate == 6){
+            answer = JSON.stringify({"ishihara":"45"});  
+        }else if (whichPlate == 7){
+            answer = JSON.stringify({"ishihara":"2"}); 
+        }else if (whichPlate == 8){
+            answer = JSON.stringify({"ishihara":"16"});
+        }else if (whichPlate == 9){
+            answer = JSON.stringify({"ishihara":"35"}); 
+        }else if (whichPlate == 10){
+            answer = JSON.stringify({"ishihara":"96"}); 
+        }
+ 
+        //Check to ensure this plate not previously presented
+        if (plateCounter[whichPlate] == 0) {
+            //Present trial
+            var ishihara_plate = {
+                type: 'image-text-responseMAS',
+                stimulus: "ishiharaPlateImg/ishihara-"+whichPlate+".png", 
+                stimulus_height: 400, 
+                correctAnswer: answer,
+                on_start: function(trial) {
+                    correctAnswer = trial.correctAnswer}, //recorded in the "prompt" column of the output
+                questions: [
+                    { prompt: '<p style="color:white;">Carefully type what number you see. '+
+                        '<p>If you do not see a number, type "None".',
+                    rows: 1, 
+                    columns: 1,
+                    required: true,
+                    name: 'ishihara'}],
+                    button_label: "Next",
+                    on_finish: function(data){
+                            if(data.responses == correctAnswer){
+                                data.correct = 1;  //correct
+                            } else {
+                                data.correct = 0;}} //incorrect
+                    }         
+            timeline.push(ishihara_plate) 
+            plateCounter[whichPlate] = 1; 
+            plateNum++
+        }
+    }
+
+    // Color Vision check //
+    var colorvision = {
+        type: 'survey-multi-choiceCZ',
+        text_color: 'white',
+        questions: [
+            {prompt: 'Do you have difficulty seeing colors or noticing differences<br>between colors compared to the average person?', 
+            options: ['Yes', 'No'],
+            horizontal: false,
+            required: true, 
+            name: 'colorDifficulty'},
+
+            {prompt: 'Do you consider yourself to be colorblind?',
+            options: ['Yes', 'No'],
+            horizontal: false,
+            required: true, 
+            name: 'colorBlind'},
+
+            {prompt: 'What device did you use to complete this experiment?',
+            options: ['Computer', 'Tablet', 'Phone', 'Other'],
+            horizontal: false,
+            required: true, 
+            name: 'device'}
+        ],
+        preamble: "",
+        button_label: "Done",
+        randomize_question_order: false,
+        }; 
+    timeline.push(colorvision); 
+
+
+}
+
+
+/* --------------------------------------- End Color vision check ------------------------ */
+//jsPsych.data.get().localSave('csv','mydata.csv');
+
+//Exit fullscreen
+timeline.push({
+    type: 'fullscreen',
+    fullscreen_mode: false
+})
+
+
+//Saving data
+    //server calling with AJAX
+        function saveData(data_object) {
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', 'write_data.php');
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        xhr.onload = function() {
+            if(xhr.status == 200){
+            var response = JSON.parse(JSON.stringify(xhr.responseText));
+
+            }
+        };
+        xhr.send(data_object.json());
+        }
+
+    //Remove (from jspsych data) the first line of data (consent form), which has already been written to the database & create a new variable with the rest of the data to save
+    function finalSave (){
+        var data_to_save = jsPsych.data.get().filterCustom(function(trial){
+            return trial.trial_index > 0;})
+        saveData(data_to_save)
+        }
+
+
+        //Call function to save all the data
+        timeline.push({
+        type: 'call-function',
+        func:  finalSave
+        });
+
+
+// ------------- UPDATE DEBRIEFING SCRIPT  ------------//  
+if (bg == 1) {
+    var end_completion = {
+        type: "html-keyboard-response",
+        stimulus:  function(){
+              //jsPsych.data.get().localSave('csv', randomID+".csv") //save to local device
+            return '<p>Great job! You have finished the experiment.</p>' 
+            + '<p> The goal of this experiment is to investigate the factors that influence how people interpret visualizations.'
+            + '</p><p> Participants in this experiment were assigned to one of eight conditions. Each condition had 2 possible backgrounds'
+            + '</p><p> and twenty possible color palettes (for example, the colormaps you saw could have been red, blue, or a combination'
+            + '</p><p> of various other colors).'
+            + '<br>Please enter the following code on your mTurk HIT: <br> 7pkPMzZ6ETnK'
+            + '</p><p>Thank you for participating! You may now close this window.</p>';},
+        choices: jsPsych.NO_KEYS} //Prevents any input reponse from moving beyond the screen
+    timeline.push(end_completion)
+
+} else if (bg == 0) {
+    var end_completion = {
+        type: "html-keyboard-response",
+        stimulus:  function(){
+              //jsPsych.data.get().localSave('csv', randomID+".csv") //save to local device
+            return '<p style="color:white;">Great job! You have finished the experiment.</p>' 
+            + '</p><p style="color:white;"> The goal of this experiment is to investigate the factors that influence how people interpret visualizations.'
+            + '</p><p style="color:white;"> Participants in this experiment were assigned to one of eight conditions. Each condition had 2 possible backgrounds'
+            + '</p><p style="color:white;"> and twenty possible color palettes (for example, the colormaps you saw could have been red, blue, or a combination'
+            + '</p><p style="color:white;"> of various other colors).'
+            + '<br>Please enter the following code on your mTurk HIT: <br> 7pkPMzZ6ETnK' 
+            + '</p><p style="color:white;">Thank you for participating! You may now close this window.</p>';},
+        choices: jsPsych.NO_KEYS} //Prevents any input reponse from moving beyond the screen
+    timeline.push(end_completion)
+}
+/*
+//Present completion/debriefing screen
+var end_completion = {
+        type: "html-keyboard-response",
+        stimulus: function(){
+             //SONA version
+            if (expType == 0){
+                // jsPsych.data.get().localSave('csv',randomID+".csv") // saves to local device. 
+                 return "<p>Great job! You have finished the experiment.</p>" +
+                "<p>The goal of this experiment is to investigate what factors influence peoples associations between colors and concepts. In the first part of the experiment, a word learning task, you saw objects and their labels. Then in the second part of the experiment, you selected the labels you saw in the first part of the experiment. In the last part, you indicated which of two objects went with the presented label." +
+                "<p>Participants in this experiment were randomly assigned to one of two conditions. You may have seen objects during the word learning task that were consistently in the same colors or you may have seen each object in a variety of colors. We are interested in whether the colors of the objects seen during the word learning task will influence the usage of the object labels during the second and third task." +
+                "<p>Please do not inform other potential participants of the hypotheses in our experiment.</p>"+
+                "<p>Credit for your participation will be appear on SONA in the next few days.</p>"+
+                "<p>Thank you for participating!<br>You may now close this window.</p>";
+             // mTurk version
+            }else if (expType == 1){
+                return "<p>Great job! You have finished the experiment.</p>" +
+                "<p>The goal of this experiment is to investigate what factors influence peoples associations between colors and concepts. In the first part of the experiment, a word learning task, you saw objects and their labels. Then in the second part of the experiment, you selected the labels you saw in the first part of the experiment. In the last part, you indicated which of two objects went with the presented label." +
+                "<p>Participants in this experiment were randomly assigned to one of two conditions. You may have seen objects during the word learning task that were consistently in the same colors or you may have seen each object in a variety of colors. We are interested in whether the colors of the objects seen during the word learning task will influence the usage of the object labels during the second and third task." +
+                "<p>Thank you for participating!"+
+                "<p>You may now close this window.</p>";
+            }},
+        choices: jsPsych.NO_KEYS} //Prevents any input reponse from moving beyond the screen
+    timeline.push(end_completion)b
+*/
+
+// Run the main timeline sequence this timeline is embedded in the register_success & condition_success function
+    jsPsych.init({
+            timeline: timeline,
+            preload_images: stim_preload
+        })
+
+    } // end of condition_success function
+}//end of register_success function
+
+// Run the timeline sequence // - Timeline1 for initial screen (before ID recorded)
+jsPsych.init({
+     timeline: timeline1,
+    })
+
+
+
+    </script>
+</html>
